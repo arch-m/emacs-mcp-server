@@ -10,6 +10,8 @@
 
 (require 'mcp-server-tools)
 (require 'cl-lib)
+(require 'json)
+(require 'seq)
 
 ;; Declare external functions to silence byte-compiler warnings
 (declare-function flycheck-error-line "flycheck" (err))
@@ -27,6 +29,7 @@
 (declare-function flymake-diagnostic-text "flymake" (diag))
 (declare-function flymake-diagnostic-backend "flymake" (diag))
 (declare-function project-buffers "project" (project))
+(declare-function project-current "project" (&optional maybe-prompt directory))
 
 (defun mcp-server-emacs-tools--flycheck-error-to-alist (err)
   "Convert flycheck error ERR to an alist."

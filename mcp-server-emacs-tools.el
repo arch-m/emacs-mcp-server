@@ -12,8 +12,11 @@
 (require 'mcp-server-tools)
 
 ;; Add tools directory to load path
-(let ((tools-dir (expand-file-name "tools" (file-name-directory load-file-name))))
-  (add-to-list 'load-path tools-dir))
+(let* ((this-file (or load-file-name buffer-file-name))
+       (tools-dir (and this-file
+                       (expand-file-name "tools" (file-name-directory this-file)))))
+  (when tools-dir
+    (add-to-list 'load-path tools-dir)))
 
 ;; Load tool modules (each self-registers on load)
 (require 'mcp-server-emacs-tools-eval-elisp)
