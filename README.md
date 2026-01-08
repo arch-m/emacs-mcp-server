@@ -194,6 +194,21 @@ Retrieves errors and warnings from flycheck or flymake (auto-detected per buffer
 - **Memory monitoring** - Resource usage is tracked during execution
 - **Safe evaluation** - All Elisp code goes through security validation before execution
 
+### Security Limitations
+
+The security model provides defense-in-depth but has known limitations:
+
+- **Blocklist bypass via indirection** - The dangerous function blocklist checks direct function calls, but `funcall`, `apply`, or `(intern "shell-command")` can bypass it
+- **Macro evaluation** - Macros that expand to dangerous code execute at compile-time before security checks
+- **Dynamic function construction** - Code can construct function names at runtime to evade static analysis
+
+**This means:** Using `eval-elisp` requires trusting the LLM completely. The security controls reduce risk of accidental harm but cannot prevent a determined adversary.
+
+For higher security requirements, consider:
+1. Restricting tool access via `mcp-server-emacs-tools-enabled`
+2. Running Emacs in a sandboxed environment
+3. Implementing an allowlist approach for truly critical systems
+
 ### Default Protected Files
 
 The server automatically protects these sensitive file patterns:
@@ -247,7 +262,7 @@ Users have complete control over the security model through customizable setting
 (setq mcp-server-security-prompt-for-permissions nil)
 
 ;; Customize execution timeout
-(setq mcp-server-security--max-execution-time 60)  ; 60 seconds
+(setq mcp-server-security-max-execution-time 60)  ; 60 seconds
 
 ;; Add custom sensitive buffer patterns
 (setq mcp-server-security-sensitive-buffer-patterns

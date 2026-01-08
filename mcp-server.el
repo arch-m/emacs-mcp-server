@@ -61,7 +61,7 @@
 
 ;;; Constants
 
-(defconst mcp-server-version "0.1.0"
+(defconst mcp-server-version "0.3.0"
   "Version of the Emacs MCP server.")
 
 (defconst mcp-server-protocol-version "2024-11-05"
@@ -75,11 +75,16 @@
 (defvar mcp-server-running nil
   "Whether the MCP server is currently running.")
 
-(defvar mcp-server-debug nil
-  "Whether to enable debug logging.")
+(defcustom mcp-server-debug nil
+  "Whether to enable debug logging."
+  :type 'boolean
+  :group 'mcp-server)
 
-(defvar mcp-server-default-transport "unix"
-  "Default transport to use when none is specified.")
+(defcustom mcp-server-default-transport "unix"
+  "Default transport to use when none is specified."
+  :type '(choice (const :tag "Unix domain socket" "unix")
+                 (const :tag "TCP socket" "tcp"))
+  :group 'mcp-server)
 
 ;;; Customization Group
 
@@ -202,7 +207,6 @@ HOST and PORT specify the bind address (planned for future implementation)."
   ;; Initialize components
   (mcp-server-tools-init)
   (mcp-server-security-init)
-  (require 'mcp-server-emacs-tools)
   
   ;; Start the transport
   (condition-case err
@@ -359,19 +363,13 @@ If DEBUG is non-nil, enable debug logging."
                 (puthash "jsonrpc" "2.0" response-hash)
                 (puthash "id" id response-hash)
                 (puthash "result" result-hash response-hash)
-                ;; Send using raw JSON
+                ;; Send using raw JSON via transport interface
                 (let ((json-str (json-serialize response-hash)))
                   (mcp-server--debug "Direct JSON: %s" json-str)
-                  ;; Send the JSON directly by getting the client process
-                  (let* ((client-data (mcp-server-transport-unix--get-client client-id))
-                         (process (car client-data)))
-                    (if (and process (eq (process-status process) 'open))
-                        (progn
-                          (process-send-string process (concat json-str "\n"))
-                          (mcp-server--debug "Direct send completed successfully")
-                          ;; Exit cleanly without returning to main handler
-                          (throw 'mcp-handled 'success))
-                      (error "Client process not available for direct send")))))
+                  (mcp-server-transport-send-raw mcp-server-current-transport client-id json-str)
+                  (mcp-server--debug "Direct send completed successfully")
+                  ;; Exit cleanly without returning to main handler
+                  (throw 'mcp-handled 'success)))
             (error
              ;; If direct approach fails, fall back to error response
              (mcp-server--debug "Direct send failed: %s" (error-message-string direct-err))
@@ -616,9 +614,9 @@ SOCKET-NAME can be:
 
 ;;; Entry Point for Subprocess
 
-;;;###autoload
 (defun mcp-server-main ()
-  "Main entry point for running MCP server as subprocess."
+  "Main entry point for running MCP server as subprocess.
+This is an internal function, not intended for interactive use."
   (interactive)
   ;; Enable debug logging for subprocess mode
   (setq mcp-server-debug t)
@@ -626,9 +624,9 @@ SOCKET-NAME can be:
   ;; Start the server with default transport
   (mcp-server-start t)
   
-  ;; Keep the process alive
+  ;; Keep the process alive with proper event handling
   (while mcp-server-running
-    (sleep-for 0.1)))
+    (sit-for 0.1)))
 
 (provide 'mcp-server)
 

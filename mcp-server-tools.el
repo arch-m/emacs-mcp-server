@@ -255,8 +255,8 @@ Tools registered before this call are preserved."
   (setq mcp-server-tools--initialized t))
 
 (defun mcp-server-tools-cleanup ()
-  "Clean up the tools system."
-  (clrhash mcp-server-tools--registry)
+  "Clean up the tools system.
+Tool definitions are preserved since they self-register on require."
   (setq mcp-server-tools--initialized nil))
 
 (defun mcp-server-tools-clear ()

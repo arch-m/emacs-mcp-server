@@ -78,11 +78,15 @@ Use this to whitelist specific functions you trust the LLM to use freely."
 (defvar mcp-server-security--audit-log '()
   "Audit log of security events.")
 
-(defvar mcp-server-security--max-execution-time 30
-  "Maximum execution time for tools in seconds.")
+(defcustom mcp-server-security-max-execution-time 30
+  "Maximum execution time for tools in seconds."
+  :type 'integer
+  :group 'mcp-server)
 
-(defvar mcp-server-security--max-memory-usage 100000000
-  "Maximum memory usage for tools in bytes (100MB).")
+(defcustom mcp-server-security-max-memory-usage 100000000
+  "Maximum memory usage for tools in bytes (100MB)."
+  :type 'integer
+  :group 'mcp-server)
 
 (defcustom mcp-server-security-prompt-for-permissions t
   "Whether to prompt user for dangerous operations."
@@ -118,12 +122,6 @@ Use this to whitelist specific credential files you want the LLM to access."
   "List of buffer patterns that may contain sensitive information."
   :type '(repeat string)
   :group 'mcp-server)
-
-;; Backward compatibility aliases
-(defvar mcp-server-security--prompt-for-permissions mcp-server-security-prompt-for-permissions)
-(defvar mcp-server-security--sensitive-file-patterns mcp-server-security-sensitive-file-patterns)
-(defvar mcp-server-security--sensitive-buffer-patterns mcp-server-security-sensitive-buffer-patterns)
-(defvar mcp-server-security--dangerous-functions mcp-server-security-dangerous-functions)
 
 ;;; Permission Management
 
@@ -305,7 +303,7 @@ Returns the input if safe, signals an error otherwise."
     (setq gc-cons-threshold 1000000)
     
     (unwind-protect
-        (with-timeout (mcp-server-security--max-execution-time
+        (with-timeout (mcp-server-security-max-execution-time
                        (error "Execution timeout exceeded"))
           (funcall func))
       
@@ -367,19 +365,19 @@ Returns the input if safe, signals an error otherwise."
 
 (defun mcp-server-security-set-prompting (enabled)
   "Enable or disable permission prompting based on ENABLED."
-  (setq mcp-server-security--prompt-for-permissions enabled)
+  (setq mcp-server-security-prompt-for-permissions enabled)
   (mcp-server-security--log-audit 'set-prompting enabled t))
 
 (defun mcp-server-security-add-dangerous-function (func)
   "Add FUNC to the list of dangerous functions."
-  (unless (member func mcp-server-security--dangerous-functions)
-    (push func mcp-server-security--dangerous-functions)
+  (unless (member func mcp-server-security-dangerous-functions)
+    (push func mcp-server-security-dangerous-functions)
     (mcp-server-security--log-audit 'add-dangerous-function func t)))
 
 (defun mcp-server-security-remove-dangerous-function (func)
   "Remove FUNC from the list of dangerous functions."
-  (setq mcp-server-security--dangerous-functions
-        (remove func mcp-server-security--dangerous-functions))
+  (setq mcp-server-security-dangerous-functions
+        (remove func mcp-server-security-dangerous-functions))
   (mcp-server-security--log-audit 'remove-dangerous-function func t))
 
 ;;; Initialization and Cleanup
