@@ -28,6 +28,12 @@
 (defvar mcp-server-tools--initialized nil
   "Whether the tools system has been initialized.")
 
+(defvar mcp-server-tools-filter nil
+  "Predicate function to filter which tools are exposed.
+When non-nil, should be a function that takes a tool name (string)
+and returns non-nil if the tool should be included in listings and
+available for execution.  When nil, all registered tools are exposed.")
+
 ;;; Tool Definition Structure
 
 (cl-defstruct mcp-server-tool
@@ -96,20 +102,29 @@ This is a convenience macro for registering tools."
 
 ;;; Tool Listing
 
+(defun mcp-server-tools--enabled-p (name)
+  "Return non-nil if tool NAME is enabled.
+A tool is enabled if `mcp-server-tools-filter' is nil or returns
+non-nil for NAME."
+  (or (null mcp-server-tools-filter)
+      (funcall mcp-server-tools-filter name)))
+
 (defun mcp-server-tools-list ()
-  "Return a list of all registered tools in MCP format."
+  "Return a list of all enabled tools in MCP format.
+Tools are filtered by `mcp-server-tools-filter' if set."
   (let ((tools '()))
     (maphash
      (lambda (name tool)
-       (push `((name . ,name)
-               (title . ,(mcp-server-tool-title tool))
-               (description . ,(mcp-server-tool-description tool))
-               (inputSchema . ,(mcp-server-tool-input-schema tool))
-               ,@(when (mcp-server-tool-output-schema tool)
-                   `((outputSchema . ,(mcp-server-tool-output-schema tool))))
-               ,@(when (mcp-server-tool-annotations tool)
-                   `((annotations . ,(mcp-server-tool-annotations tool)))))
-             tools))
+       (when (mcp-server-tools--enabled-p name)
+         (push `((name . ,name)
+                 (title . ,(mcp-server-tool-title tool))
+                 (description . ,(mcp-server-tool-description tool))
+                 (inputSchema . ,(mcp-server-tool-input-schema tool))
+                 ,@(when (mcp-server-tool-output-schema tool)
+                     `((outputSchema . ,(mcp-server-tool-output-schema tool))))
+                 ,@(when (mcp-server-tool-annotations tool)
+                     `((annotations . ,(mcp-server-tool-annotations tool)))))
+               tools)))
      mcp-server-tools--registry)
     (nreverse tools)))
 
@@ -195,11 +210,14 @@ Provides basic type checking and required property validation."
 
 (defun mcp-server-tools-call (name arguments)
   "Call tool NAME with ARGUMENTS.
-Returns a list of content items in MCP format."
+Returns a list of content items in MCP format.
+Respects `mcp-server-tools-filter' - disabled tools cannot be called."
   (let ((tool (mcp-server-tools-get name)))
     (unless tool
       (error "Tool not found: %s" name))
-    
+    (unless (mcp-server-tools--enabled-p name)
+      (error "Tool is disabled: %s" name))
+
     ;; Execute the tool function with security sandbox
     (condition-case err
         (let ((result (funcall (mcp-server-tool-function tool) arguments)))

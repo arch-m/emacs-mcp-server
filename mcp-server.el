@@ -202,7 +202,7 @@ HOST and PORT specify the bind address (planned for future implementation)."
   ;; Initialize components
   (mcp-server-tools-init)
   (mcp-server-security-init)
-  (mcp-server-emacs-tools-register)
+  (require 'mcp-server-emacs-tools)
   
   ;; Start the transport
   (condition-case err

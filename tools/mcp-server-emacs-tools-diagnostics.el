@@ -148,21 +148,20 @@ SEVERITY-FILTER can be \"error\", \"warning\", \"info\", or nil for all."
         (json-encode (mcp-server-emacs-tools--get-diagnostics file-path severity)))
     (error (json-encode `((error . ,(error-message-string err)))))))
 
-(defun mcp-server-emacs-tools--diagnostics-register ()
-  "Register the get-diagnostics MCP tool."
-  (mcp-server-register-tool
-   (make-mcp-server-tool
-    :name "get-diagnostics"
-    :title "Get Diagnostics"
-    :description "Get flycheck/flymake diagnostics from project buffers. Returns errors and warnings grouped by file, sorted by severity."
-    :input-schema '((type . "object")
-                    (properties . ((file_path . ((type . "string")
-                                                 (description . "Optional file path to get diagnostics for a specific file only")))
-                                   (severity . ((type . "string")
-                                                (enum . ("error" "warning" "info"))
-                                                (description . "Optional filter by severity level")))))
-                    (required . []))
-    :function #'mcp-server-emacs-tools--diagnostics-handler)))
+;; Register tool on load
+(mcp-server-register-tool
+ (make-mcp-server-tool
+  :name "get-diagnostics"
+  :title "Get Diagnostics"
+  :description "Get flycheck/flymake diagnostics from project buffers. Returns errors and warnings grouped by file, sorted by severity."
+  :input-schema '((type . "object")
+                  (properties . ((file_path . ((type . "string")
+                                               (description . "Optional file path to get diagnostics for a specific file only")))
+                                 (severity . ((type . "string")
+                                              (enum . ("error" "warning" "info"))
+                                              (description . "Optional filter by severity level")))))
+                  (required . []))
+  :function #'mcp-server-emacs-tools--diagnostics-handler))
 
 (provide 'mcp-server-emacs-tools-diagnostics)
 

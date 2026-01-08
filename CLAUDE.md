@@ -182,10 +182,18 @@ Create a new file in `tools/` directory:
 (provide 'mcp-server-emacs-tools-my-tool)
 ```
 
-Then add to `mcp-server-emacs-tools.el`:
+Then register it in `mcp-server-emacs-tools.el`:
+
 ```elisp
-(require 'mcp-server-emacs-tools-my-tool)
+;; Add to mcp-server-emacs-tools--available alist:
+(defconst mcp-server-emacs-tools--available
+  '((eval-elisp . mcp-server-emacs-tools-eval-elisp)
+    (get-diagnostics . mcp-server-emacs-tools-diagnostics)
+    (my-tool . mcp-server-emacs-tools-my-tool))  ; Add your tool here
+  "Alist mapping tool names (symbols) to their feature names.")
 ```
+
+The tool will self-register when loaded. Use `mcp-server-emacs-tools-enabled` to control which tools are exposed to LLM clients.
 
 ### Testing Changes
 1. Run `./test/scripts/test-runner.sh` to validate core functionality

@@ -12,7 +12,7 @@
 (require 'mcp-server-tools)
 (require 'mcp-server-security)
 
-;; Load tool modules
+;; Load tool modules (they self-register on require)
 (let* ((this-file (or load-file-name buffer-file-name))
        (tools-dir (and this-file
                        (expand-file-name "../../tools" (file-name-directory this-file)))))
@@ -20,10 +20,6 @@
     (add-to-list 'load-path tools-dir)))
 (require 'mcp-server-emacs-tools-eval-elisp)
 (require 'mcp-server-emacs-tools-diagnostics)
-
-;; Register tools for testing
-(mcp-server-emacs-tools--eval-elisp-register)
-(mcp-server-emacs-tools--diagnostics-register)
 
 ;;; mcp-server-register-tool Tests
 
@@ -226,6 +222,46 @@
     (should (equal (mcp-server-tool-name tool) "get-diagnostics"))
     (should (mcp-server-tool-function tool))
     (should (mcp-server-tool-input-schema tool))))
+
+;;; Tool Filtering Tests
+
+(ert-deftest mcp-test-tools-filter-hides-disabled ()
+  "Test that disabled tools are hidden from tools-list."
+  (mcp-test-with-mock-server
+   ;; Register a test tool
+   (mcp-server-register-tool
+    (make-mcp-server-tool
+     :name "filter-test"
+     :title "Filter Test"
+     :description "Tool for testing filtering"
+     :input-schema '((type . "object"))
+     :function (lambda (args) "result")))
+   ;; With no filter, tool should be listed
+   (let ((mcp-server-tools-filter nil))
+     (should (cl-find "filter-test" (mcp-server-tools-list)
+                      :key (lambda (t) (alist-get 'name t)) :test #'equal)))
+   ;; With filter that excludes it, tool should not be listed
+   (let ((mcp-server-tools-filter (lambda (name) (not (equal name "filter-test")))))
+     (should-not (cl-find "filter-test" (mcp-server-tools-list)
+                          :key (lambda (t) (alist-get 'name t)) :test #'equal)))))
+
+(ert-deftest mcp-test-tools-filter-blocks-call ()
+  "Test that disabled tools cannot be called."
+  (mcp-test-with-mock-server
+   ;; Register a test tool
+   (mcp-server-register-tool
+    (make-mcp-server-tool
+     :name "call-filter-test"
+     :title "Call Filter Test"
+     :description "Tool for testing call filtering"
+     :input-schema '((type . "object"))
+     :function (lambda (args) "success")))
+   ;; With no filter, tool can be called
+   (let ((mcp-server-tools-filter nil))
+     (should (mcp-server-tools-call "call-filter-test" '())))
+   ;; With filter that excludes it, call should error
+   (let ((mcp-server-tools-filter (lambda (name) (not (equal name "call-filter-test")))))
+     (should-error (mcp-server-tools-call "call-filter-test" '())))))
 
 (provide 'test-mcp-emacs-tools)
 ;;; test-mcp-emacs-tools.el ends here
