@@ -221,10 +221,13 @@
    ;; New connection
    ((string-match "open.*" event)
     (mcp-server-transport-unix--handle-new-connection process))
-   ;; Server process terminated
+   ;; Server process terminated unexpectedly
    ((memq (process-status process) '(exit signal))
     (mcp-server-transport-unix--error "Unix socket server process terminated: %s" event)
-    (mcp-server-transport-unix--stop))
+    (mcp-server-transport-unix--stop)
+    ;; Notify main server that transport died
+    (when (boundp 'mcp-server-running)
+      (setq mcp-server-running nil)))
    ;; Other events
    (t
     (mcp-server-transport-unix--debug "Unix socket server process event: %s" event))))
