@@ -193,10 +193,26 @@ HOST and PORT specify the bind address (planned for future implementation)."
   (interactive "P")
   (mcp-server--start-with-transport "tcp" debug host port))
 
+(defun mcp-server--transport-alive-p ()
+  "Check if the current transport is actually alive.
+Returns nil if no transport or transport is dead."
+  (when mcp-server-current-transport
+    (let ((status (mcp-server-transport-status mcp-server-current-transport)))
+      (and status
+           (alist-get 'running status)
+           (memq (alist-get 'server-process status) '(listen open run))))))
+
 (defun mcp-server--start-with-transport (transport-name debug &rest args)
   "Start MCP server with TRANSPORT-NAME, DEBUG flag and ARGS."
   (when mcp-server-running
-    (error "MCP server is already running"))
+    ;; Check if transport is actually alive
+    (if (mcp-server--transport-alive-p)
+        (error "MCP server is already running")
+      ;; Transport died but flag wasn't cleared - clean up
+      (mcp-server--info "Stale server state detected, cleaning up...")
+      (setq mcp-server-running nil)
+      (when mcp-server-current-transport
+        (ignore-errors (mcp-server-transport-stop mcp-server-current-transport)))))
   
   (setq mcp-server-debug debug)
   (setq mcp-server-current-transport transport-name)
