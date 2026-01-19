@@ -88,8 +88,12 @@ Use this to whitelist specific functions you trust the LLM to use freely."
   :type 'integer
   :group 'mcp-server)
 
-(defcustom mcp-server-security-prompt-for-permissions t
-  "Whether to prompt user for dangerous operations."
+(defcustom mcp-server-security-prompt-for-permissions nil
+  "Whether to prompt user in Emacs for dangerous operations.
+When nil (the default), tool permission decisions are delegated to the
+MCP client, which uses tool annotations to determine whether to prompt.
+Set to t to require explicit Emacs minibuffer confirmation for dangerous
+operations (useful for extra security or when using untrusted clients)."
   :type 'boolean
   :group 'mcp-server)
 
@@ -148,11 +152,11 @@ Returns t if permitted, nil otherwise."
           ('no
            (mcp-server-security--log-audit operation data nil)
            nil)))
-    ;; If not prompting, deny dangerous operations by default
-    (let ((granted (not (mcp-server-security--is-dangerous-operation operation))))
-      (puthash cache-key granted mcp-server-security--permission-cache)
-      (mcp-server-security--log-audit operation data granted)
-      granted)))
+    ;; When not prompting, allow all operations - client handles permission
+    ;; via tool annotations (readOnlyHint, destructiveHint, etc.)
+    (puthash cache-key t mcp-server-security--permission-cache)
+    (mcp-server-security--log-audit operation data t)
+    t))
 
 (defun mcp-server-security--prompt-permission (operation data)
   "Prompt user for permission for OPERATION with DATA.
@@ -213,20 +217,20 @@ Returns the input if safe, signals an error otherwise."
     ;; Check for shell command injection
     (when (string-match-p "[;&|`$]" input)
       (error "Input contains potentially dangerous shell characters"))
-    
+
     ;; Check for path traversal
     (when (string-match-p "\\.\\./\\|~/" input)
       (error "Input contains potentially dangerous path patterns"))
-    
+
     ;; Check for excessive length
     (when (> (length input) 10000)
       (error "Input exceeds maximum length")))
-  
+
   ;; Check for suspicious elisp code patterns in strings
   (when (and (stringp input)
              (string-match-p "(\\s-*\\(?:eval\\|load\\|shell-command\\)" input))
     (error "Input contains potentially dangerous elisp patterns"))
-  
+
   input)
 
 (defun mcp-server-security-sanitize-string (str)
@@ -245,7 +249,7 @@ Returns the input if safe, signals an error otherwise."
   "Safely evaluate FORM with security restrictions."
   ;; Check if form contains dangerous functions
   (mcp-server-security--check-form-safety form)
-  
+
   ;; Execute with timeout and memory limits
   (mcp-server-security--execute-with-limits
    (lambda () (eval form))))
@@ -259,7 +263,7 @@ Returns the input if safe, signals an error otherwise."
                (not (member form mcp-server-security-allowed-dangerous-functions)))
       (unless (mcp-server-security-check-permission form)
         (error "Permission denied for function: %s" form))))
-   
+
    ;; Check lists (function calls)
    ((listp form)
     (when form
@@ -271,25 +275,25 @@ Returns the input if safe, signals an error otherwise."
                      (not (member func mcp-server-security-allowed-dangerous-functions)))
             (unless (mcp-server-security-check-permission func args)
               (error "Permission denied for function: %s" func)))
-          
+
           ;; Special checks for file access functions
           (when (memq func '(find-file find-file-noselect view-file insert-file-contents))
             (let ((file-path (car args)))
               (when (and file-path (stringp file-path))
                 (when (mcp-server-security--is-sensitive-file file-path)
-                  (unless (mcp-server-security-check-permission 
+                  (unless (mcp-server-security-check-permission
                            (format "access-sensitive-file:%s" func) file-path)
                     (error "Permission denied for sensitive file access: %s" file-path))))))
-          
+
           ;; Special checks for buffer access functions
           (when (memq func '(switch-to-buffer set-buffer with-current-buffer))
-            (let ((buffer-name (if (eq func 'with-current-buffer) 
+            (let ((buffer-name (if (eq func 'with-current-buffer)
                                    (car args)
                                  (car args))))
               (when (and buffer-name (stringp buffer-name))
                 (when (mcp-server-security--is-sensitive-buffer buffer-name)
                   (error "Access denied to sensitive buffer: %s" buffer-name))))))
-        
+
         ;; Recursively check arguments
         (dolist (arg args)
           (mcp-server-security--check-form-safety arg)))))))
@@ -298,18 +302,18 @@ Returns the input if safe, signals an error otherwise."
   "Execute FUNC with time and memory limits."
   (let ((start-time (current-time))
         (start-gc-cons-threshold gc-cons-threshold))
-    
+
     ;; Set conservative GC threshold for memory monitoring
     (setq gc-cons-threshold 1000000)
-    
+
     (unwind-protect
         (with-timeout (mcp-server-security-max-execution-time
                        (error "Execution timeout exceeded"))
           (funcall func))
-      
+
       ;; Restore GC threshold
       (setq gc-cons-threshold start-gc-cons-threshold)
-      
+
       ;; Log execution time
       (let ((elapsed (float-time (time-subtract (current-time) start-time))))
         (when (> elapsed 5.0)
@@ -324,7 +328,7 @@ Returns the input if safe, signals an error otherwise."
                  (data . ,data)
                  (granted . ,granted))))
     (push entry mcp-server-security--audit-log)
-    
+
     ;; Keep only last 1000 entries
     (when (> (length mcp-server-security--audit-log) 1000)
       (setq mcp-server-security--audit-log

@@ -102,6 +102,23 @@ This is an Emacs MCP (Model Context Protocol) Server implementation written in p
                 (required . ("expression")))
 ```
 
+### JSON Boolean Values
+
+**NEVER use `:json-false` in this codebase. It is banned.**
+
+Always use `t` for JSON `true` and `:false` for JSON `false`:
+```elisp
+;; Correct
+:annotations '((readOnlyHint . t)
+               (destructiveHint . :false))
+
+;; BANNED - will break the MCP protocol!
+:annotations '((readOnlyHint . t)
+               (destructiveHint . :json-false))  ; DO NOT USE
+```
+
+Why: `:json-false` is what Emacs returns when *parsing* JSON input, but `json-serialize` only accepts `:false` for output. This codebase produces JSON for the MCP protocol. Using `:json-false` will cause serialization errors and break client communication.
+
 ### Autoload Cookies
 
 **Use `;;;###autoload` only for user-facing interactive commands:**
@@ -252,11 +269,40 @@ Tools can be selectively enabled via `mcp-server-emacs-tools-enabled`:
 
 ## Security Model
 
-### Permission System
-- Dangerous operations require user confirmation
-- Permission decisions are cached per session  
+### Tool Annotations (MCP Specification)
+
+Tools expose behavior hints via annotations that MCP clients use to determine
+whether to prompt users for permission:
+
+| Annotation | Description |
+|------------|-------------|
+| `readOnlyHint` | `true` if tool doesn't modify anything |
+| `destructiveHint` | `true` if tool may cause destructive changes |
+| `idempotentHint` | `true` if repeated calls have no additional effect |
+| `openWorldHint` | `true` if tool interacts with external entities |
+
+Current tool annotations:
+- `eval-elisp`: destructive, non-idempotent, open-world (can do anything)
+- `get-diagnostics`: read-only, idempotent, closed-world (safe)
+
+### Permission Handling
+
+By default, permission decisions are delegated to the MCP client. The client
+uses tool annotations to decide whether to prompt users. This means:
+
+- **No Emacs minibuffer prompts** by default
+- Clients like Claude Code handle allow/deny decisions
+- Tools provide accurate hints so clients can make informed decisions
+
+To enable Emacs-side prompting (extra security layer):
+```elisp
+(setq mcp-server-security-prompt-for-permissions t)
+```
+
+### Permission Caching
+- Permission decisions are cached per session
 - Comprehensive audit trail of all actions
-- Configurable prompting behavior
+- View audit log: `M-x mcp-server-security-show-audit-log`
 
 ### Input Validation
 - JSON Schema validation for all tool inputs
@@ -266,7 +312,7 @@ Tools can be selectively enabled via `mcp-server-emacs-tools-enabled`:
 ### Execution Sandboxing
 - 30-second default timeout for operations
 - Memory usage monitoring
-- Restricted access to dangerous functions
+- Restricted access to dangerous functions (when Emacs prompting enabled)
 
 ## Client Integration Examples
 

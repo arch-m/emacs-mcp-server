@@ -29,7 +29,11 @@
                   (properties . ((expression . ((type . "string")
                                                 (description . "The Elisp expression to evaluate")))))
                   (required . ["expression"]))
-  :function #'mcp-server-emacs-tools--eval-elisp-handler))
+  :function #'mcp-server-emacs-tools--eval-elisp-handler
+  :annotations '((readOnlyHint . :false)
+                 (destructiveHint . t)
+                 (idempotentHint . :false)
+                 (openWorldHint . t))))
 
 (provide 'mcp-server-emacs-tools-eval-elisp)
 

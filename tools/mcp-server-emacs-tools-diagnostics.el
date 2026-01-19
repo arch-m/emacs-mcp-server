@@ -161,7 +161,11 @@ SEVERITY-FILTER can be \"error\", \"warning\", \"info\", or nil for all."
                                               (enum . ("error" "warning" "info"))
                                               (description . "Optional filter by severity level")))))
                   (required . []))
-  :function #'mcp-server-emacs-tools--diagnostics-handler))
+  :function #'mcp-server-emacs-tools--diagnostics-handler
+  :annotations '((readOnlyHint . t)
+                 (destructiveHint . :false)
+                 (idempotentHint . t)
+                 (openWorldHint . :false))))
 
 (provide 'mcp-server-emacs-tools-diagnostics)
 
