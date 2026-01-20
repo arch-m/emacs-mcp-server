@@ -82,7 +82,7 @@
 
 (defun mcp-server-transport-send (transport-name client-id message)
   "Send MESSAGE to CLIENT-ID using transport NAME."
-  (mcp-server-transport--debug "transport-send START - transport=%s, client=%s" 
+  (mcp-server-transport--debug "transport-send START - transport=%s, client=%s"
                                transport-name client-id)
   (let ((transport (mcp-server-transport-get transport-name)))
     (mcp-server-transport--debug "transport object = %S" transport)
@@ -150,9 +150,9 @@ This bypasses the normal JSON serialization."
     :null)
    ;; If it's an alist (list of key-value pairs where each pair is (key . value))
    ;; Check: list of cons cells where each cons has a non-list car (the key)
-   ((and (listp obj) 
-         (not (null obj)) 
-         (seq-every-p (lambda (item) 
+   ((and (listp obj)
+         (not (null obj))
+         (seq-every-p (lambda (item)
                         (and (consp item)
                              (not (listp (car item))))) obj))
     (let ((ht (make-hash-table :test 'equal)))
@@ -162,7 +162,7 @@ This bypasses the normal JSON serialization."
                      (car pair)))
               (value (mcp-server-transport--alist-to-json (cdr pair))))
           (when (string= key "isError")
-            (mcp-server-transport--debug "Processing isError - raw value: %S, converted value: %S" 
+            (mcp-server-transport--debug "Processing isError - raw value: %S, converted value: %S"
                                          (cdr pair) value))
           (puthash key value ht)))
       ht))
@@ -172,16 +172,16 @@ This bypasses the normal JSON serialization."
    ;; If it's a symbol, convert to string (except for special values)
    ((symbolp obj)
     (cond
-     ((eq obj t) 
+     ((eq obj t)
       (mcp-server-transport--debug "Converting symbol t to JSON true")
       t)
-     ((eq obj :null) 
+     ((eq obj :null)
       (mcp-server-transport--debug "Converting symbol :null to JSON null")
       :null)
-     ((eq obj :false) 
+     ((eq obj :false)
       (mcp-server-transport--debug "Converting symbol :false to JSON false")
       :false)
-     (t 
+     (t
       (mcp-server-transport--debug "Unexpected symbol %S (name: %s, type: %s) being converted to string"
                                    obj (symbol-name obj) (type-of obj))
       (symbol-name obj))))
@@ -199,10 +199,10 @@ This bypasses the normal JSON serialization."
   "Validate that MESSAGE is a proper JSON-RPC 2.0 message."
   (unless (alist-get 'jsonrpc message)
     (error "Missing jsonrpc field"))
-  
+
   (unless (string= (alist-get 'jsonrpc message) "2.0")
     (error "Invalid jsonrpc version: %s" (alist-get 'jsonrpc message)))
-  
+
   message)
 
 ;;; Client Management Utilities
@@ -226,22 +226,22 @@ This bypasses the normal JSON serialization."
 Returns updated buffer with remaining partial data."
   (let ((combined (concat buffer new-data))
         (remaining ""))
-    
+
     ;; Process complete lines
     (while (string-match "\n" combined)
       (let* ((line-end (match-end 0))
              (line (substring combined 0 (1- line-end))))
-        
+
         ;; Remove processed line from combined buffer
         (setq combined (substring combined line-end))
-        
+
         ;; Process the line if it's not empty
         (when (> (length (string-trim line)) 0)
           (condition-case err
               (funcall line-processor line)
             (error
              (mcp-server-transport--error "Error processing line: %s" (error-message-string err)))))))
-    
+
     ;; Return remaining partial data
     combined))
 
