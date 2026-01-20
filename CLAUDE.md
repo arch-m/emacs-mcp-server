@@ -181,6 +181,12 @@ Respects `mcp-server-tools-filter' - disabled tools cannot be called."
 
 This project requires **Emacs 27.1+** for native JSON support (`json-serialize`, `json-parse-string`).
 
+### Version Bumping
+
+When releasing a new version, update **both** locations in `mcp-server.el`:
+1. Header comment: `;; Version: X.Y.Z`
+2. Runtime constant: `(defconst mcp-server-version "X.Y.Z" ...)`
+
 ## Key Architecture Components
 
 ### Modular Transport System

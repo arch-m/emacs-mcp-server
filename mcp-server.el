@@ -5,7 +5,7 @@
 ;; Author: Claude Code + Rolf Håvard Blindheim<rhblind@gmail.com>
 ;; URL: https://github.com/rhblind/emacs-mcp-server
 ;; Keywords: mcp, protocol, integration, tools
-;; Version: 0.4.0
+;; Version: 0.5.0
 ;; Package-Requires: ((emacs "27.1"))
 
 ;; This file is NOT part of GNU Emacs.
@@ -61,7 +61,7 @@
 
 ;;; Constants
 
-(defconst mcp-server-version "0.4.0"
+(defconst mcp-server-version "0.5.0"
   "Version of the Emacs MCP server.")
 
 (defconst mcp-server-protocol-version "2024-11-05"
@@ -83,7 +83,7 @@
 (defcustom mcp-server-default-transport "unix"
   "Default transport to use when none is specified."
   :type '(choice (const :tag "Unix domain socket" "unix")
-                 (const :tag "TCP socket" "tcp"))
+          (const :tag "TCP socket" "tcp"))
   :group 'mcp-server)
 
 ;;; Customization Group
@@ -213,21 +213,21 @@ Returns nil if no transport or transport is dead."
       (setq mcp-server-running nil)
       (when mcp-server-current-transport
         (ignore-errors (mcp-server-transport-stop mcp-server-current-transport)))))
-  
+
   (setq mcp-server-debug debug)
   (setq mcp-server-current-transport transport-name)
-  
-  (mcp-server--info "Starting MCP server (version %s) with %s transport" 
+
+  (mcp-server--info "Starting MCP server (version %s) with %s transport"
                     mcp-server-version transport-name)
 
   ;; Initialize components
   (mcp-server-tools-init)
   (mcp-server-security-init)
-  
+
   ;; Start the transport
   (condition-case err
       (progn
-        (apply #'mcp-server-transport-start 
+        (apply #'mcp-server-transport-start
                transport-name #'mcp-server--handle-message args)
         (setq mcp-server-running t)
         (mcp-server--info "MCP server started successfully"))
@@ -240,20 +240,20 @@ Returns nil if no transport or transport is dead."
   (interactive)
   (unless mcp-server-running
     (error "MCP server is not running"))
-  
+
   (mcp-server--info "Stopping MCP server")
-  
+
   ;; Stop the transport
   (when mcp-server-current-transport
     (mcp-server-transport-stop mcp-server-current-transport))
-  
+
   ;; Cleanup components
   (mcp-server-tools-cleanup)
   (mcp-server-security-cleanup)
-  
+
   (setq mcp-server-running nil)
   (setq mcp-server-current-transport nil)
-  
+
   (mcp-server--info "MCP server stopped"))
 
 (defun mcp-server-restart (&optional debug)
@@ -311,7 +311,7 @@ Uses `catch'/`throw' for early exit after successful response send."
            ;; Unknown method
            (t
             (mcp-server--send-error client-id id -32601 "Method not found" method)))))
-    
+
     (error
      (mcp-server--debug "Main error handler - err=%S, message=%S" err message)
      (mcp-server--debug "Message id=%S" (alist-get 'id message))
@@ -324,13 +324,13 @@ Uses `catch'/`throw' for early exit after successful response send."
 (defun mcp-server--handle-initialize (id params client-id)
   "Handle initialize request with ID and PARAMS from CLIENT-ID."
   (mcp-server--debug "Initialize request from %s: %s" client-id params)
-  
+
   (let ((protocol-version (alist-get 'protocolVersion params))
         (client-capabilities (alist-get 'capabilities params))
         (client-info (alist-get 'clientInfo params)))
-    
+
     (mcp-server--info "Client %s connecting: %s" client-id (alist-get 'name client-info))
-    
+
     ;; Send initialize response
     (mcp-server--send-response
      client-id id
@@ -348,7 +348,7 @@ Uses `catch'/`throw' for early exit after successful response send."
 (defun mcp-server--handle-tools-list (id params client-id)
   "Handle tools/list request with ID and PARAMS from CLIENT-ID."
   (mcp-server--debug "Tools list request from %s: %s" client-id params)
-  
+
   (let ((tools (mcp-server-tools-list)))
     (mcp-server--send-response
      client-id id
@@ -357,17 +357,17 @@ Uses `catch'/`throw' for early exit after successful response send."
 (defun mcp-server--handle-tools-call (id params client-id)
   "Handle tools/call request with ID and PARAMS from CLIENT-ID."
   (mcp-server--debug "Tools call request from %s: %s" client-id params)
-  
+
   (let ((tool-name (alist-get 'name params))
         (arguments (alist-get 'arguments params)))
-    
+
     (condition-case err
         (let* ((result (mcp-server-tools-call tool-name arguments))
                ;; Check if this is an error result
                (is-error-bool (and (> (length result) 0)
                                    (listp (aref result 0))
                                    (eq (alist-get 'type (aref result 0)) 'error))))
-          (mcp-server--debug "Tool %s - is-error-bool = %S (type: %s)" 
+          (mcp-server--debug "Tool %s - is-error-bool = %S (type: %s)"
                              tool-name is-error-bool (type-of is-error-bool))
           ;; Use direct hash table approach to avoid alist conversion issues
           (condition-case direct-err
@@ -403,7 +403,7 @@ Uses `catch'/`throw' for early exit after successful response send."
   "Handle resources/list request with ID and PARAMS from CLIENT-ID.
 Returns empty list as resources feature is planned for future implementation."
   (mcp-server--debug "Resources list request from %s: %s" client-id params)
-  
+
   (mcp-server--send-response
    client-id id
    '((resources . []))))
@@ -412,14 +412,14 @@ Returns empty list as resources feature is planned for future implementation."
   "Handle resources/read request with ID and PARAMS from CLIENT-ID.
 Returns error as resources feature is planned for future implementation."
   (mcp-server--debug "Resources read request from %s: %s" client-id params)
-  
+
   (mcp-server--send-error client-id id -32002 "Resource not found" params))
 
 (defun mcp-server--handle-prompts-list (id params client-id)
   "Handle prompts/list request with ID and PARAMS from CLIENT-ID.
 Returns empty list as prompts feature is planned for future implementation."
   (mcp-server--debug "Prompts list request from %s: %s" client-id params)
-  
+
   (mcp-server--send-response
    client-id id
    '((prompts . []))))
@@ -482,8 +482,8 @@ IS-ERROR-BOOL is a boolean indicating if this is an error."
     (puthash "jsonrpc" "2.0" response-ht)
     (puthash "id" id response-ht)
     (puthash "result" result-ht response-ht)
-    
-    (mcp-server--debug "Response hash table - isError=%S, response-ht=%S" 
+
+    (mcp-server--debug "Response hash table - isError=%S, response-ht=%S"
                        is-error-bool response-ht)
 
     ;; Serialize and send using json-serialize directly
@@ -495,7 +495,7 @@ IS-ERROR-BOOL is a boolean indicating if this is an error."
        (mcp-server--debug "Error in response-with-bool: %s" (error-message-string err))
        ;; Fallback to normal response
        (let ((content-value (alist-get 'content result-content)))
-         (mcp-server--send-response client-id id 
+         (mcp-server--send-response client-id id
                                     `((content . ,content-value)
                                       (isError . ,(if is-error-bool t :false)))))))))
 
@@ -515,12 +515,12 @@ IS-ERROR-BOOL is a boolean indicating if this is an error."
   (if mcp-server-running
       (let ((transport-status (mcp-server-transport-status mcp-server-current-transport))
             (client-count (length (mcp-server-transport-list-clients mcp-server-current-transport))))
-        (message "MCP server is running with %s transport (debug: %s, clients: %d)\nTransport status: %s" 
+        (message "MCP server is running with %s transport (debug: %s, clients: %d)\nTransport status: %s"
                  mcp-server-current-transport
                  (if mcp-server-debug "on" "off")
                  client-count
                  transport-status))
-    (message "MCP server is stopped (debug: %s)" 
+    (message "MCP server is stopped (debug: %s)"
              (if mcp-server-debug "on" "off"))))
 
 ;;; Additional Status Commands
@@ -532,7 +532,7 @@ IS-ERROR-BOOL is a boolean indicating if this is an error."
   (if mcp-server-running
       (let ((clients (mcp-server-transport-list-clients mcp-server-current-transport)))
         (if clients
-            (message "Connected clients: %s" 
+            (message "Connected clients: %s"
                      (mapcar (lambda (client) (alist-get 'id client)) clients))
           (message "No clients connected")))
     (message "MCP server is not running")))
@@ -541,7 +541,7 @@ IS-ERROR-BOOL is a boolean indicating if this is an error."
 (defun mcp-server-get-socket-path ()
   "Get the current Unix socket path if using Unix transport."
   (interactive)
-  (if (and mcp-server-running 
+  (if (and mcp-server-running
            (string= mcp-server-current-transport "unix"))
       (let ((socket-path (mcp-server-transport-unix-socket-path)))
         (message "Unix socket path: %s" socket-path)
@@ -569,17 +569,17 @@ If DEBUG is non-nil, enable debug logging."
   (let ((mcp-server-socket-name socket-name))
     (mcp-server-start-unix debug)))
 
-;;;###autoload  
+;;;###autoload
 (defun mcp-server-set-socket-name (socket-name)
   "Set the socket name configuration for future server starts.
 SOCKET-NAME can be:
 - String: Fixed socket name (e.g., \"primary\")
-- 'user: Username-based naming  
+- 'user: Username-based naming
 - 'session: Session-based naming
 - Function: Custom naming function
 - nil: Revert to PID-based naming"
-  (interactive 
-   (list (let ((choice (completing-read 
+  (interactive
+   (list (let ((choice (completing-read
                         "Socket naming strategy: "
                         '("primary" "user" "session" "custom" "pid-based")
                         nil nil)))
@@ -588,16 +588,16 @@ SOCKET-NAME can be:
             ((string= choice "user") 'user)
             ((string= choice "session") 'session)
             ((string= choice "pid-based") nil)
-            ((string= choice "custom") 
+            ((string= choice "custom")
              (read-string "Custom socket name: "))
             (t choice)))))
-  
+
   (setq mcp-server-socket-name socket-name)
-  (message "Socket name set to: %s" 
+  (message "Socket name set to: %s"
            (cond
             ((stringp socket-name) (format "\"%s\"" socket-name))
             ((eq socket-name 'user) "user-based")
-            ((eq socket-name 'session) "session-based")  
+            ((eq socket-name 'session) "session-based")
             ((null socket-name) "PID-based")
             (t socket-name))))
 
@@ -608,7 +608,7 @@ SOCKET-NAME can be:
   (let ((config mcp-server-socket-name)
         (directory (or mcp-server-socket-directory "~/.emacs.d/.local/cache/"))
         (conflict-res mcp-server-socket-conflict-resolution))
-    
+
     (message "Socket Configuration:\n  Name: %s\n  Directory: %s\n  Conflict Resolution: %s"
              (cond
               ((stringp config) (format "\"%s\" (fixed)" config))
@@ -637,10 +637,10 @@ This is an internal function, not intended for interactive use."
   (interactive)
   ;; Enable debug logging for subprocess mode
   (setq mcp-server-debug t)
-  
+
   ;; Start the server with default transport
   (mcp-server-start t)
-  
+
   ;; Keep the process alive with proper event handling
   (while mcp-server-running
     (sit-for 0.1)))
