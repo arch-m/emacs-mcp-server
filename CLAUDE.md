@@ -293,17 +293,26 @@ Current tool annotations:
 
 ### Permission Handling
 
-By default, permission decisions are delegated to the MCP client. The client
-uses tool annotations to decide whether to prompt users. This means:
+The security model has two layers:
 
-- **No Emacs minibuffer prompts** by default
-- Clients like Claude Code handle allow/deny decisions
-- Tools provide accurate hints so clients can make informed decisions
+1. **MCP client prompting** - Clients like Claude Code use tool annotations
+   (`destructiveHint`, etc.) to decide whether to prompt users for tool access.
 
-To enable Emacs-side prompting (extra security layer):
+2. **Emacs blocklist** - Dangerous functions (e.g., `delete-file`, `shell-command`)
+   are always blocked, regardless of whether the tool was allowed by the client.
+
+By default (`mcp-server-security-prompt-for-permissions` = `nil`):
+- Dangerous operations are **blocked silently** (no minibuffer prompt)
+- Safe operations are allowed
+- The blocklist is always enforced
+
+To enable Emacs-side prompting (approve dangerous operations case-by-case):
 ```elisp
 (setq mcp-server-security-prompt-for-permissions t)
 ```
+
+This prompts in the minibuffer instead of blocking, letting users approve
+dangerous operations individually.
 
 ### Permission Caching
 - Permission decisions are cached per session

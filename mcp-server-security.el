@@ -90,10 +90,11 @@ Use this to whitelist specific functions you trust the LLM to use freely."
 
 (defcustom mcp-server-security-prompt-for-permissions nil
   "Whether to prompt user in Emacs for dangerous operations.
-When nil (the default), tool permission decisions are delegated to the
-MCP client, which uses tool annotations to determine whether to prompt.
-Set to t to require explicit Emacs minibuffer confirmation for dangerous
-operations (useful for extra security or when using untrusted clients)."
+When nil (the default), dangerous operations are blocked without prompting.
+The MCP client uses tool annotations to determine whether to prompt for
+tool-level permission, but the blocklist is always enforced.
+Set to t to prompt in the Emacs minibuffer instead of blocking, allowing
+users to approve dangerous operations on a case-by-case basis."
   :type 'boolean
   :group 'mcp-server)
 
@@ -152,11 +153,11 @@ Returns t if permitted, nil otherwise."
           ('no
            (mcp-server-security--log-audit operation data nil)
            nil)))
-    ;; When not prompting, allow all operations - client handles permission
-    ;; via tool annotations (readOnlyHint, destructiveHint, etc.)
-    (puthash cache-key t mcp-server-security--permission-cache)
-    (mcp-server-security--log-audit operation data t)
-    t))
+    ;; When not prompting, still block dangerous operations
+    (let ((granted (not (mcp-server-security--is-dangerous-operation operation))))
+      (puthash cache-key granted mcp-server-security--permission-cache)
+      (mcp-server-security--log-audit operation data granted)
+      granted)))
 
 (defun mcp-server-security--prompt-permission (operation data)
   "Prompt user for permission for OPERATION with DATA.
@@ -262,7 +263,8 @@ Returns the input if safe, signals an error otherwise."
     (when (and (member form mcp-server-security-dangerous-functions)
                (not (member form mcp-server-security-allowed-dangerous-functions)))
       (unless (mcp-server-security-check-permission form)
-        (error "Permission denied for function: %s" form))))
+        (error "Security: `%s' is blocked. Add it to `mcp-server-security-allowed-dangerous-functions' \
+to allow, or set `mcp-server-security-prompt-for-permissions' to t to prompt" form))))
 
    ;; Check lists (function calls)
    ((listp form)
@@ -274,7 +276,8 @@ Returns the input if safe, signals an error otherwise."
           (when (and (member func mcp-server-security-dangerous-functions)
                      (not (member func mcp-server-security-allowed-dangerous-functions)))
             (unless (mcp-server-security-check-permission func args)
-              (error "Permission denied for function: %s" func)))
+              (error "Security: `%s' is blocked. Add it to `mcp-server-security-allowed-dangerous-functions' \
+to allow, or set `mcp-server-security-prompt-for-permissions' to t to prompt" func)))
 
           ;; Special checks for file access functions
           (when (memq func '(find-file find-file-noselect view-file insert-file-contents))
