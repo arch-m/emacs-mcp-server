@@ -258,8 +258,11 @@ Users have complete control over the security model through customizable setting
 
 **Global Security Settings:**
 ```elisp
-;; Disable all permission prompts (not recommended)
+;; Default: no prompts, dangerous operations are blocked
 (setq mcp-server-security-prompt-for-permissions nil)
+
+;; DANGEROUS: no prompts, allow everything
+(setq mcp-server-security-prompt-for-permissions 'dangerous)
 
 ;; Customize execution timeout
 (setq mcp-server-security-max-execution-time 60)  ; 60 seconds
@@ -301,6 +304,12 @@ M-x customize-group RET mcp-server RET
 (setq mcp-server-security-prompt-for-permissions nil)  ; No prompts - just deny
 (setq mcp-server-security-allowed-dangerous-functions '(buffer-string point))
 (setq mcp-server-security-allowed-sensitive-files nil)  ; No sensitive files allowed
+```
+
+**Dangerous Mode (unsafe):**
+```elisp
+;; Allow everything without prompting (high risk)
+(setq mcp-server-security-prompt-for-permissions 'dangerous)
 ```
 
 ### Monitoring Security
@@ -492,7 +501,7 @@ The tool will self-register when loaded. Use `mcp-server-emacs-tools-enabled` to
 - Test wrapper independently: Run wrapper script manually to verify connection
 
 **Permission errors:**
-- View audit log with `M-x mcp-server-security-show-audit-log`, grant specific permissions with `(mcp-server-security-grant-permission 'function-name)`, or disable prompting with `(mcp-server-security-set-prompting nil)`.
+- View audit log with `M-x mcp-server-security-show-audit-log`, grant specific permissions with `(mcp-server-security-grant-permission 'function-name)`, or set permission mode with `(mcp-server-security-set-prompting nil)`, `(mcp-server-security-set-prompting t)`, or `(mcp-server-security-set-prompting 'dangerous)`.
 
 **Debug mode:** 
 - Enable with `(setq mcp-server-debug t)` or toggle with `M-x mcp-server-toggle-debug`.

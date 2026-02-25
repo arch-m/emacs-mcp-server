@@ -89,13 +89,16 @@ Use this to whitelist specific functions you trust the LLM to use freely."
   :group 'mcp-server)
 
 (defcustom mcp-server-security-prompt-for-permissions nil
-  "Whether to prompt user in Emacs for dangerous operations.
+  "How Emacs should handle dangerous operations.
 When nil (the default), dangerous operations are blocked without prompting.
-The MCP client uses tool annotations to determine whether to prompt for
-tool-level permission, but the blocklist is always enforced.
-Set to t to prompt in the Emacs minibuffer instead of blocking, allowing
-users to approve dangerous operations on a case-by-case basis."
-  :type 'boolean
+When t, prompt in the Emacs minibuffer so users can approve case-by-case.
+When set to `dangerous', allow all operations without prompting.
+The MCP client still uses tool annotations for client-side prompts, but
+this setting controls Emacs-side enforcement."
+  :type '(choice
+          (const :tag "Block dangerous operations (no prompt)" nil)
+          (const :tag "Prompt for dangerous operations" t)
+          (const :tag "DANGEROUS: allow all operations (no prompt)" dangerous))
   :group 'mcp-server)
 
 (defcustom mcp-server-security-sensitive-file-patterns
@@ -140,24 +143,31 @@ Returns t if permitted, nil otherwise."
 
 (defun mcp-server-security--request-permission (operation data cache-key)
   "Request permission for OPERATION with DATA, caching result with CACHE-KEY."
-  (if mcp-server-security-prompt-for-permissions
-      (let ((response (mcp-server-security--prompt-permission operation data)))
-        (pcase response
-          ('always
-           (puthash cache-key t mcp-server-security--permission-cache)
-           (mcp-server-security--log-audit operation data 'always)
-           t)
-          ('yes
-           (mcp-server-security--log-audit operation data t)
-           t)
-          ('no
-           (mcp-server-security--log-audit operation data nil)
-           nil)))
-    ;; When not prompting, still block dangerous operations
-    (let ((granted (not (mcp-server-security--is-dangerous-operation operation))))
-      (puthash cache-key granted mcp-server-security--permission-cache)
-      (mcp-server-security--log-audit operation data granted)
-      granted)))
+  (pcase mcp-server-security-prompt-for-permissions
+    ('dangerous
+     ;; Explicitly unsafe mode: allow everything without prompting.
+     (puthash cache-key t mcp-server-security--permission-cache)
+     (mcp-server-security--log-audit operation data 'dangerous)
+     t)
+    (`t
+     (let ((response (mcp-server-security--prompt-permission operation data)))
+       (pcase response
+         ('always
+          (puthash cache-key t mcp-server-security--permission-cache)
+          (mcp-server-security--log-audit operation data 'always)
+          t)
+         ('yes
+          (mcp-server-security--log-audit operation data t)
+          t)
+         ('no
+          (mcp-server-security--log-audit operation data nil)
+          nil))))
+    (_
+     ;; When not prompting, still block dangerous operations
+     (let ((granted (not (mcp-server-security--is-dangerous-operation operation))))
+       (puthash cache-key granted mcp-server-security--permission-cache)
+       (mcp-server-security--log-audit operation data granted)
+       granted))))
 
 (defun mcp-server-security--prompt-permission (operation data)
   "Prompt user for permission for OPERATION with DATA.
@@ -175,8 +185,12 @@ Returns 'yes, 'no, or 'always."
   ;; First check if function is explicitly allowed
   (unless (member operation mcp-server-security-allowed-dangerous-functions)
     ;; Then check if it's in the dangerous functions list or matches dangerous patterns
-    (or (member operation mcp-server-security-dangerous-functions)
-        (string-match-p "delete\\|kill\\|remove\\|destroy" (symbol-name operation)))))
+    (let ((operation-name (cond
+                           ((symbolp operation) (symbol-name operation))
+                           ((stringp operation) operation)
+                           (t ""))))
+      (or (member operation mcp-server-security-dangerous-functions)
+          (string-match-p "delete\\|kill\\|remove\\|destroy" operation-name)))))
 
 (defun mcp-server-security--is-sensitive-file (path)
   "Check if PATH points to a sensitive file."
@@ -264,7 +278,8 @@ Returns the input if safe, signals an error otherwise."
                (not (member form mcp-server-security-allowed-dangerous-functions)))
       (unless (mcp-server-security-check-permission form)
         (error "Security: `%s' is blocked. Add it to `mcp-server-security-allowed-dangerous-functions' \
-to allow, or set `mcp-server-security-prompt-for-permissions' to t to prompt" form))))
+to allow, set `mcp-server-security-prompt-for-permissions' to t to prompt, \
+or to `dangerous' to allow everything" form))))
 
    ;; Check lists (function calls)
    ((listp form)
@@ -277,7 +292,8 @@ to allow, or set `mcp-server-security-prompt-for-permissions' to t to prompt" fo
                      (not (member func mcp-server-security-allowed-dangerous-functions)))
             (unless (mcp-server-security-check-permission func args)
               (error "Security: `%s' is blocked. Add it to `mcp-server-security-allowed-dangerous-functions' \
-to allow, or set `mcp-server-security-prompt-for-permissions' to t to prompt" func)))
+to allow, set `mcp-server-security-prompt-for-permissions' to t to prompt, \
+or to `dangerous' to allow everything" func)))
 
           ;; Special checks for file access functions
           (when (memq func '(find-file find-file-noselect view-file insert-file-contents))
@@ -370,10 +386,13 @@ to allow, or set `mcp-server-security-prompt-for-permissions' to t to prompt" fu
 
 ;;; Configuration
 
-(defun mcp-server-security-set-prompting (enabled)
-  "Enable or disable permission prompting based on ENABLED."
-  (setq mcp-server-security-prompt-for-permissions enabled)
-  (mcp-server-security--log-audit 'set-prompting enabled t))
+(defun mcp-server-security-set-prompting (mode)
+  "Set dangerous operation permission MODE.
+MODE must be one of nil (block), t (prompt), or `dangerous' (allow all)."
+  (unless (memq mode '(nil t dangerous))
+    (user-error "Invalid mode %S. Expected nil, t, or 'dangerous" mode))
+  (setq mcp-server-security-prompt-for-permissions mode)
+  (mcp-server-security--log-audit 'set-prompting mode t))
 
 (defun mcp-server-security-add-dangerous-function (func)
   "Add FUNC to the list of dangerous functions."

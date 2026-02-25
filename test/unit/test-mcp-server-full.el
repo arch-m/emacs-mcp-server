@@ -90,6 +90,24 @@
   (should (boundp 'mcp-server-security-dangerous-functions))
   (should (boundp 'mcp-server-security-prompt-for-permissions)))
 
+(ert-deftest mcp-test-security-dangerous-mode-allows-without-prompt ()
+  "Test that `dangerous' mode allows dangerous operations without prompting."
+  (let ((mcp-server-security--permission-cache (make-hash-table :test 'equal))
+        (mcp-server-security--audit-log '())
+        (mcp-server-security-prompt-for-permissions 'dangerous))
+    (should (mcp-server-security-check-permission 'delete-file))
+    (should (eq (alist-get 'granted (car mcp-server-security--audit-log))
+                'dangerous))))
+
+(ert-deftest mcp-test-security-set-prompting-validates-mode ()
+  "Test mode validation for `mcp-server-security-set-prompting'."
+  (let ((mcp-server-security--audit-log '())
+        (mcp-server-security-prompt-for-permissions nil))
+    (mcp-server-security-set-prompting 'dangerous)
+    (should (eq mcp-server-security-prompt-for-permissions 'dangerous))
+    (should-error (mcp-server-security-set-prompting 'invalid-mode)
+                  :type 'user-error)))
+
 ;;; Transport Integration Tests
 
 (ert-deftest mcp-test-transport-integration ()
