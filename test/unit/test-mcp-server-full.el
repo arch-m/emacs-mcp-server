@@ -108,6 +108,44 @@
     (should-error (mcp-server-security-set-prompting 'invalid-mode)
                   :type 'user-error)))
 
+(ert-deftest mcp-test-security-denied-permissions-are-cached ()
+  "Test that denied permissions are cached and not recomputed."
+  (let ((mcp-server-security--permission-cache (make-hash-table :test 'equal))
+        (request-count 0))
+    (cl-letf (((symbol-function 'mcp-server-security--request-permission)
+               (lambda (_operation _data cache-key)
+                 (cl-incf request-count)
+                 (puthash cache-key nil mcp-server-security--permission-cache)
+                 nil)))
+      (should-not (mcp-server-security-check-permission 'delete-file))
+      (should-not (mcp-server-security-check-permission 'delete-file))
+      (should (= request-count 1)))))
+
+(ert-deftest mcp-test-security-prompt-is-deferred-outside-process-filter ()
+  "Test that interactive permission prompting is deferred through a timer."
+  (let ((mcp-server-security--prompt-active nil)
+        (mcp-server-security-permission-prompt-timeout 1)
+        (timer-ran nil))
+    (cl-letf (((symbol-function 'run-at-time)
+               (lambda (_secs _repeat function &rest args)
+                 (setq timer-ran t)
+                 (apply function args)
+                 'fake-timer))
+              ((symbol-function 'mcp-server-security--prompt-permission-now)
+               (lambda (_operation _data)
+                 'always)))
+      (should (eq (mcp-server-security--prompt-permission 'delete-file nil)
+                  'always))
+      (should timer-ran)
+      (should-not mcp-server-security--prompt-active))))
+
+(ert-deftest mcp-test-security-prompt-errors-without-interactive-frame ()
+  "Test that prompting fails fast when no usable Emacs frame exists."
+  (cl-letf (((symbol-function 'mcp-server-security--select-prompt-frame)
+             (lambda () nil)))
+    (should-error (mcp-server-security--prompt-permission-now 'delete-file nil)
+                  :type 'error)))
+
 ;;; Transport Integration Tests
 
 (ert-deftest mcp-test-transport-integration ()

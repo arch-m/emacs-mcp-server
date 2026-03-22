@@ -314,6 +314,11 @@ To enable Emacs-side prompting (approve dangerous operations case-by-case):
 This prompts in the minibuffer instead of blocking, letting users approve
 dangerous operations individually.
 
+To allow everything without prompting (unsafe):
+```elisp
+(setq mcp-server-security-prompt-for-permissions 'dangerous)
+```
+
 ### Permission Caching
 - Permission decisions are cached per session
 - Comprehensive audit trail of all actions

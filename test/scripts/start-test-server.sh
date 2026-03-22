@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # start-test-server.sh - Start Emacs with MCP server for testing
 

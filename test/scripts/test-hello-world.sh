@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # test-hello-world.sh - Send "Hello, world!" message to Emacs via MCP
 # This script connects to the Emacs MCP server and prints a message to the *Messages* buffer

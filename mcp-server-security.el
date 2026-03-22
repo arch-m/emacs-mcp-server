@@ -78,6 +78,9 @@ Use this to whitelist specific functions you trust the LLM to use freely."
 (defvar mcp-server-security--audit-log '()
   "Audit log of security events.")
 
+(defvar mcp-server-security--prompt-active nil
+  "Non-nil while an interactive MCP permission prompt is active.")
+
 (defcustom mcp-server-security-max-execution-time 30
   "Maximum execution time for tools in seconds."
   :type 'integer
@@ -99,6 +102,14 @@ this setting controls Emacs-side enforcement."
           (const :tag "Block dangerous operations (no prompt)" nil)
           (const :tag "Prompt for dangerous operations" t)
           (const :tag "DANGEROUS: allow all operations (no prompt)" dangerous))
+  :group 'mcp-server)
+
+(defcustom mcp-server-security-permission-prompt-timeout 30
+  "Maximum number of seconds to wait for an Emacs-side permission prompt.
+This timeout applies when `mcp-server-security-prompt-for-permissions' is t.
+It prevents socket requests from hanging indefinitely when Emacs is running
+as a daemon without an interactive frame available."
+  :type 'integer
   :group 'mcp-server)
 
 (defcustom mcp-server-security-sensitive-file-patterns
@@ -137,9 +148,10 @@ Use this to whitelist specific credential files you want the LLM to access."
   "Check if OPERATION with DATA is permitted.
 Returns t if permitted, nil otherwise."
   (let ((cache-key (format "%s:%s" operation data)))
-    (if (gethash cache-key mcp-server-security--permission-cache)
-        t
-      (mcp-server-security--request-permission operation data cache-key))))
+    (let ((cached (gethash cache-key mcp-server-security--permission-cache 'missing)))
+      (if (eq cached 'missing)
+          (mcp-server-security--request-permission operation data cache-key)
+        cached))))
 
 (defun mcp-server-security--request-permission (operation data cache-key)
   "Request permission for OPERATION with DATA, caching result with CACHE-KEY."
@@ -150,18 +162,22 @@ Returns t if permitted, nil otherwise."
      (mcp-server-security--log-audit operation data 'dangerous)
      t)
     (`t
-     (let ((response (mcp-server-security--prompt-permission operation data)))
-       (pcase response
-         ('always
-          (puthash cache-key t mcp-server-security--permission-cache)
-          (mcp-server-security--log-audit operation data 'always)
-          t)
-         ('yes
-          (mcp-server-security--log-audit operation data t)
-          t)
-         ('no
-          (mcp-server-security--log-audit operation data nil)
-          nil))))
+     (condition-case err
+         (let ((response (mcp-server-security--prompt-permission operation data)))
+           (pcase response
+             ('always
+              (puthash cache-key t mcp-server-security--permission-cache)
+              (mcp-server-security--log-audit operation data 'always)
+              t)
+             ('yes
+              (mcp-server-security--log-audit operation data t)
+              t)
+             ('no
+              (mcp-server-security--log-audit operation data nil)
+              nil)))
+       (error
+        (mcp-server-security--log-audit operation data nil)
+        (error "Permission prompt failed: %s" (error-message-string err)))))
     (_
      ;; When not prompting, still block dangerous operations
      (let ((granted (not (mcp-server-security--is-dangerous-operation operation))))
@@ -171,14 +187,83 @@ Returns t if permitted, nil otherwise."
 
 (defun mcp-server-security--prompt-permission (operation data)
   "Prompt user for permission for OPERATION with DATA.
-Returns 'yes, 'no, or 'always."
-  (let ((prompt (format "MCP: %s%s (y)es, (n)o, (!) always: "
+Returns 'yes, 'no, or 'always.
+The actual minibuffer read is deferred through a timer so process filters do
+not block the Emacs UI event loop."
+  (when mcp-server-security--prompt-active
+    (error "Another MCP permission prompt is already active"))
+  (let ((response-cell (list :pending)))
+    (setq mcp-server-security--prompt-active t)
+    (run-at-time 0 nil #'mcp-server-security--complete-prompt
+                 response-cell operation data)
+    (mcp-server-security--wait-for-prompt-response response-cell)))
+
+(defun mcp-server-security--complete-prompt (response-cell operation data)
+  "Store the result of prompting for OPERATION with DATA in RESPONSE-CELL."
+  (unwind-protect
+      (setcar response-cell
+              (condition-case err
+                  (mcp-server-security--prompt-permission-now operation data)
+                (error
+                 (list 'error (error-message-string err)))))
+    (setq mcp-server-security--prompt-active nil)))
+
+(defun mcp-server-security--wait-for-prompt-response (response-cell)
+  "Wait for RESPONSE-CELL to be populated by a deferred permission prompt."
+  (let* ((timeout (1+ (max 0 mcp-server-security-permission-prompt-timeout)))
+         (deadline (+ (float-time) timeout)))
+    (while (and (eq (car response-cell) :pending)
+                (< (float-time) deadline))
+      (sit-for 0.1))
+    (pcase (car response-cell)
+      (:pending
+       (setq mcp-server-security--prompt-active nil)
+       (error "Permission prompt did not complete within %ss" timeout))
+      (`(error ,message)
+       (error "%s" message))
+      (response response))))
+
+(defun mcp-server-security--prompt-permission-now (operation data)
+  "Prompt immediately for OPERATION with DATA on an interactive Emacs frame."
+  (let ((frame (mcp-server-security--select-prompt-frame))
+        (prompt (format "MCP: %s%s (y)es, (n)o, (!) always: "
                         operation
                         (if data (format " (%s)" data) ""))))
-    (pcase (read-char-choice prompt '(?y ?n ?!))
-      (?y 'yes)
-      (?n 'no)
-      (?! 'always))))
+    (unless frame
+      (error "No interactive Emacs frame available for MCP permission prompt"))
+    (with-selected-frame frame
+      (ignore-errors
+        (select-frame-set-input-focus frame))
+      (with-timeout (mcp-server-security-permission-prompt-timeout
+                     (error "Permission prompt timed out after %ss"
+                            mcp-server-security-permission-prompt-timeout))
+        (mcp-server-security--read-permission-choice prompt)))))
+
+(defun mcp-server-security--select-prompt-frame ()
+  "Return the best available frame for an MCP permission prompt."
+  (let* ((selected (selected-frame))
+         (frames (cl-remove-if-not #'mcp-server-security--promptable-frame-p
+                                   (frame-list))))
+    (or (and (mcp-server-security--promptable-frame-p selected) selected)
+        (cl-find-if (lambda (frame)
+                      (and (frame-visible-p frame)
+                           (frame-focus-state frame)))
+                    frames)
+        (cl-find-if #'frame-visible-p frames)
+        (car frames))))
+
+(defun mcp-server-security--promptable-frame-p (frame)
+  "Return non-nil when FRAME can be used for an MCP permission prompt."
+  (and (frame-live-p frame)
+       (not (eq (frame-parameter frame 'minibuffer) 'only))
+       (not (eq (frame-visible-p frame) nil))))
+
+(defun mcp-server-security--read-permission-choice (prompt)
+  "Read a permission choice for PROMPT and return 'yes, 'no, or 'always."
+  (pcase (read-char-choice prompt '(?y ?n ?!))
+    (?y 'yes)
+    (?n 'no)
+    (?! 'always)))
 
 (defun mcp-server-security--is-dangerous-operation (operation)
   "Check if OPERATION is considered dangerous."

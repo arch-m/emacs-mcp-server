@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # emacs-mcp-wrapper.sh - Shell wrapper for Emacs MCP Server
 #

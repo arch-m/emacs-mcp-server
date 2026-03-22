@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # test-unix-socket-fixed.sh - Fixed version without getopt dependency
 # Shell script to test Emacs MCP Server via Unix domain socket

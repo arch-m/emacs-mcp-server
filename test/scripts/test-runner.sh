@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # test-runner.sh - Comprehensive test runner for MCP Server
 #
